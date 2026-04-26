@@ -5,8 +5,12 @@ Fetches the pull request diff, loads the agent personality and rules,
 builds a review prompt, and delegates inference to the LLM module.
 """
 
+import logging
+
 import requests
 from llm import ask_llm
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_diff(diff_url: str) -> str:
@@ -17,8 +21,17 @@ def fetch_diff(diff_url: str) -> str:
 
     Returns:
         The diff as a plain-text string.
+
+    Raises:
+        requests.exceptions.ConnectionError: If the diff URL is unreachable.
     """
-    return requests.get(diff_url).text
+    try:
+        response = requests.get(diff_url, timeout=10)
+        response.raise_for_status()
+        return response.text
+    except requests.exceptions.ConnectionError as e:
+        logger.error("Failed to fetch diff from %s: %s", diff_url, e)
+        raise
 
 
 def load_agent() -> tuple[str, str]:

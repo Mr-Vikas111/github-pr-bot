@@ -6,9 +6,17 @@ triggers an AI-powered code review, and posts the result as a PR comment.
 """
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from reviewer import run_review
+from dotenv import load_dotenv
+import logging
 import os
 import requests
+
+load_dotenv()  # Load variables from .env file into the environment
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -32,7 +40,15 @@ def post_comment(repo: str, pr_number: int, comment: str) -> None:
         "Accept": "application/vnd.github+json"
     }
 
-    requests.post(url, headers=headers, json={"body": comment})
+    try:
+        response = requests.post(url, headers=headers, json={"body": comment}, timeout=10)
+        response.raise_for_status()
+    except requests.exceptions.ConnectionError as e:
+        logger.error("Failed to reach GitHub API (network/DNS issue): %s", e)
+        raise
+    except requests.exceptions.HTTPError as e:
+        logger.error("GitHub API returned an error: %s", e)
+        raise
 
 
 @app.post("/webhook")
@@ -60,9 +76,17 @@ async def webhook(request: Request):
     diff_url = pr["diff_url"]  # URL to the raw unified diff for this PR
 
     # Run the AI review against the PR diff
-    review = run_review(diff_url)
+    try:
+        review = run_review(diff_url)
+    except requests.exceptions.ConnectionError:
+        return JSONResponse(status_code=502, content={"status": "error", "detail": "Could not fetch PR diff — network unreachable"})
 
     # Post the generated review as a comment on the PR
-    post_comment(repo, pr_number, review)
+    try:
+        post_comment(repo, pr_number, review)
+    except requests.exceptions.ConnectionError:
+        return JSONResponse(status_code=502, content={"status": "error", "detail": "Could not post comment — GitHub API unreachable (DNS/network failure)"})
+    except requests.exceptions.HTTPError as e:
+        return JSONResponse(status_code=502, content={"status": "error", "detail": f"GitHub API error: {e}"})
 
     return {"status": "review posted"}
