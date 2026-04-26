@@ -1,0 +1,4 @@
+- Do NOT flag comments as issues
+- Do NOT hallucinate problems
+- Only report real issues
+- If no issues → say "No significant issues found"
