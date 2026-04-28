@@ -5,7 +5,7 @@ Exposes a /webhook endpoint that listens for GitHub pull request events,
 triggers an AI-powered code review, and posts the result as a PR comment.
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request,BackgroundTasks
 from fastapi.responses import JSONResponse
 from reviewer import run_full_review
 from dotenv import load_dotenv
@@ -49,10 +49,28 @@ def post_comment(repo: str, pr_number: int, comment: str) -> None:
     except requests.exceptions.HTTPError as e:
         logger.error("GitHub API returned an error: %s", e)
         raise
+    
+def process_review(repo, pr_number, diff_url):
+    # Run the AI review against the PR diff
+    try:
+        # review = run_review(diff_url)
+        review = run_full_review(diff_url)
+    except requests.exceptions.ConnectionError:
+        return JSONResponse(status_code=502, content={"status": "error", "detail": "Could not fetch PR diff — network unreachable"})
+
+    # Post the generated review as a comment on the PR
+    try:
+        post_comment(repo, pr_number, review)
+    except requests.exceptions.ConnectionError:
+        return JSONResponse(status_code=502, content={"status": "error", "detail": "Could not post comment — GitHub API unreachable (DNS/network failure)"})
+    except requests.exceptions.HTTPError as e:
+        return JSONResponse(status_code=502, content={"status": "error", "detail": f"GitHub API error: {e}"})
+
+    return {"status": "review posted"}
 
 
 @app.post("/webhook")
-async def webhook(request: Request):
+async def webhook(request: Request, background_tasks: BackgroundTasks):
     """Handle incoming GitHub webhook events for pull requests.
 
     Processes ``opened`` and ``synchronize`` PR actions, runs an AI review
@@ -81,20 +99,10 @@ async def webhook(request: Request):
     repo = payload["repository"]["full_name"]
     pr_number = pr["number"]
     diff_url = pr["diff_url"]  # URL to the raw unified diff for this PR
+    
+    
+    # 👇 IMPORTANT: run async in background
+    background_tasks.add_task(process_review, repo, pr_number, diff_url)
 
-    # Run the AI review against the PR diff
-    try:
-        # review = run_review(diff_url)
-        review = run_full_review(diff_url)
-    except requests.exceptions.ConnectionError:
-        return JSONResponse(status_code=502, content={"status": "error", "detail": "Could not fetch PR diff — network unreachable"})
-
-    # Post the generated review as a comment on the PR
-    try:
-        post_comment(repo, pr_number, review)
-    except requests.exceptions.ConnectionError:
-        return JSONResponse(status_code=502, content={"status": "error", "detail": "Could not post comment — GitHub API unreachable (DNS/network failure)"})
-    except requests.exceptions.HTTPError as e:
-        return JSONResponse(status_code=502, content={"status": "error", "detail": f"GitHub API error: {e}"})
-
-    return {"status": "review posted"}
+    return {"status": "processing"}  # immediate response
+    
