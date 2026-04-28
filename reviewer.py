@@ -93,6 +93,49 @@ def run_fixer(validated_review):
 
     return ask_llm(soul, prompt)
 
+def run_planner(diff):
+    soul, rules = load_agent("agent/agents/planner")
+
+    prompt = f"""
+    {rules}
+
+    Analyze this PR diff and create a review plan.
+
+    Return:
+    - What to check
+    - Priority areas
+    - Risk level
+
+    DIFF:
+    {diff[:4000]}
+    """
+
+    return ask_llm(soul, prompt)
+
+
+def run_reviewer_with_plan(diff, plan):
+    soul, rules = load_agent("agent")
+
+    prompt = f"""
+    {rules}
+
+    Follow this review plan:
+
+    {plan}
+
+    Now analyze the code accordingly.
+
+    Return:
+    - Issues
+    - Severity
+    - Explanation
+
+    DIFF:
+    {diff[:8000]}
+    """
+
+    return ask_llm(soul, prompt)
+
 
 def run_full_review(diff_url):
     diff = fetch_diff(diff_url)
@@ -100,21 +143,32 @@ def run_full_review(diff_url):
     if not diff.strip():
         return "No changes detected."
 
-    review = run_reviewer(diff)
+    # Step 1: Planner
+    plan = run_planner(diff)
+    
+    # Step 2: Reviewer (guided by plan)
+    review = run_reviewer_with_plan(diff, plan)
 
+    # Step 3: Validator
     validated = run_validator(review)
+    
+    # Step 4: Fixer
     fixes = run_fixer(validated)
 
     final_output = f"""
-    ### 🔍 AI Code Review
+        ### 🧠 Review Plan
+        {plan}
 
-    {validated}
+        ---
 
-    ---
+        ### 🔍 Issues Found
+        {validated}
 
-    ### 🛠 Suggested Fixes
+        ---
 
-    {fixes}
-    """
+        ### 🛠 Suggested Fixes
+        {fixes}
+        """
+
 
     return final_output
