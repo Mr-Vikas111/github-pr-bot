@@ -9,6 +9,8 @@ import logging
 
 import requests
 from llm import ask_llm
+from utils import load_agent
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -91,19 +93,71 @@ def review_diff(diff: str) -> str:
     return ask_llm(soul, prompt)
 
 
-def run_review(diff_url: str) -> str:
-    """Fetch a PR diff and return the AI-generated review.
+# def run_review(diff_url: str) -> str:
+#     """Fetch a PR diff and return the AI-generated review.
 
-    Args:
-        diff_url: URL of the pull request's raw diff.
+#     Args:
+#         diff_url: URL of the pull request's raw diff.
 
-    Returns:
-        A markdown review string, or a message if no changes are detected.
+#     Returns:
+#         A markdown review string, or a message if no changes are detected.
+#     """
+#     diff = fetch_diff(diff_url)
+
+#     # Guard against empty diffs (e.g. draft PRs with no commits)
+#     if not diff.strip():
+#         return "No changes detected in PR."
+
+#     return review_diff(diff)
+
+
+def run_reviewer(diff):
+    soul, rules = load_agent("agent")
+
+    prompt = f"""
+    {rules}
+
+    Analyze this PR diff.
+
+    Return:
+    - Issues
+    - Severity
+    - Fix
+
+    DIFF:
+    {diff[:8000]}
     """
+
+    return ask_llm(soul, prompt)
+
+
+def run_validator(review_output):
+    soul, rules = load_agent("agent/agents/validator")
+
+    prompt = f"""
+    {rules}
+
+    Validate this code review.
+
+    Remove incorrect or weak issues.
+
+    Return only high-confidence issues.
+
+    REVIEW:
+    {review_output}
+    """
+
+    return ask_llm(soul, prompt)
+
+
+def run_full_review(diff_url):
     diff = fetch_diff(diff_url)
 
-    # Guard against empty diffs (e.g. draft PRs with no commits)
     if not diff.strip():
-        return "No changes detected in PR."
+        return "No changes detected."
 
-    return review_diff(diff)
+    review = run_reviewer(diff)
+
+    validated = run_validator(review)
+
+    return validated

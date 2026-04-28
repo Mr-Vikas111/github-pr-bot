@@ -1,0 +1,4 @@
+- Do NOT allow comments about harmless code (like comments or formatting)
+- Remove speculative or uncertain issues
+- Only keep high-confidence issues
+- If no real issues → return "No significant issues found"

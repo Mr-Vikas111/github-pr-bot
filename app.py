@@ -7,7 +7,7 @@ triggers an AI-powered code review, and posts the result as a PR comment.
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from reviewer import run_review
+from reviewer import run_full_review
 from dotenv import load_dotenv
 import logging
 import os
@@ -64,7 +64,14 @@ async def webhook(request: Request):
     Returns:
         A dict with a ``status`` key indicating the outcome.
     """
-    payload = await request.json()
+    body = await request.body()
+    if not body:
+        return JSONResponse(status_code=400, content={"status": "error", "detail": "Empty request body"})
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "error", "detail": "Invalid JSON payload"})
 
     # Only act on PR open or new-commit events
     if payload.get("action") not in ["opened", "synchronize"]:
@@ -77,7 +84,8 @@ async def webhook(request: Request):
 
     # Run the AI review against the PR diff
     try:
-        review = run_review(diff_url)
+        # review = run_review(diff_url)
+        review = run_full_review(diff_url)
     except requests.exceptions.ConnectionError:
         return JSONResponse(status_code=502, content={"status": "error", "detail": "Could not fetch PR diff — network unreachable"})
 
