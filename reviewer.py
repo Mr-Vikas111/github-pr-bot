@@ -73,6 +73,26 @@ def run_validator(review_output):
 
     return ask_llm(soul, prompt)
 
+def run_fixer(validated_review):
+    soul, rules = load_agent("agent/agents/fixer")
+
+    prompt = f"""
+    {rules}
+
+    Based on the following validated issues,
+    suggest fixes and improved code.
+
+    Return:
+    - Issue
+    - Fix
+    - Improved Code (if applicable)
+
+    ISSUES:
+    {validated_review}
+    """
+
+    return ask_llm(soul, prompt)
+
 
 def run_full_review(diff_url):
     diff = fetch_diff(diff_url)
@@ -83,5 +103,18 @@ def run_full_review(diff_url):
     review = run_reviewer(diff)
 
     validated = run_validator(review)
+    fixes = run_fixer(validated)
 
-    return validated
+    final_output = f"""
+    ### 🔍 AI Code Review
+
+    {validated}
+
+    ---
+
+    ### 🛠 Suggested Fixes
+
+    {fixes}
+    """
+
+    return final_output

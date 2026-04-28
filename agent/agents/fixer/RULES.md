@@ -1,0 +1,4 @@
+- Only fix real issues (ignore invalid ones)
+- Provide clear, minimal code changes
+- Avoid over-engineering
+- Prefer simple and readable solutions
