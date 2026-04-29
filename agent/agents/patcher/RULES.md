@@ -1,0 +1,4 @@
+- Only generate patches for real issues
+- Keep changes minimal
+- Do not rewrite entire files
+- Follow correct diff format
