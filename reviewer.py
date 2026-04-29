@@ -112,6 +112,26 @@ def run_planner(diff):
 
     return ask_llm(soul, prompt)
 
+def run_patcher(diff, validated_issues):
+    soul, rules = load_agent("agent/agents/patcher")
+
+    prompt = f"""
+    {rules}
+
+    Given the original diff and issues,
+    generate a git patch to fix them.
+
+    Return ONLY diff format.
+
+    ORIGINAL DIFF:
+    {diff[:6000]}
+
+    ISSUES:
+    {validated_issues}
+    """
+
+    return ask_llm(soul, prompt)
+
 
 def run_reviewer_with_plan(diff, plan):
     soul, rules = load_agent("agent")
@@ -154,6 +174,9 @@ def run_full_review(diff_url):
     
     # Step 4: Fixer
     fixes = run_fixer(validated)
+    
+    # Step 5: Patcher
+    patch = run_patcher(diff, validated)
 
     final_output = f"""
         ### 🧠 Review Plan
@@ -161,14 +184,19 @@ def run_full_review(diff_url):
 
         ---
 
-        ### 🔍 Issues Found
+        ### 🔍 Issues
         {validated}
 
         ---
 
-        ### 🛠 Suggested Fixes
+        ### 🛠 Fix Suggestions
         {fixes}
-        """
 
+        ---
+
+        ### 🔧 Auto Fix Patch
+        ```diff
+        {patch}
+        ```"""
 
     return final_output
